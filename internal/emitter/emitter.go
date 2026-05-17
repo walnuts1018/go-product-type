@@ -412,6 +412,9 @@ func renderConstructor(buf *bytes.Buffer, generatedType model.GeneratedType, qua
 	for _, input := range generatedType.Inputs {
 		for _, fieldName := range input.FieldNames {
 			if _, ok := seen[fieldName]; ok {
+				// Duplicate fields have already been verified by ComposeFields to be
+				// structurally identical anonymous fields. Thus, initializing from
+				// the first encountered input is safe and correct.
 				continue
 			}
 			seen[fieldName] = struct{}{}

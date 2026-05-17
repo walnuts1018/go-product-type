@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/walnuts1018/go-adtgen/internal/model"
 )
@@ -335,18 +334,18 @@ func countBaseInputNames(inputs []model.ResolvedType) map[string]int {
 
 func constructorParameterName(expr string, counts map[string]int) string {
 	base := baseInputName(expr)
-	if counts[base] == 1 || !strings.Contains(expr, ".") {
-		return lowerFirst(base)
+	if counts[base] == 1 {
+		return toLowerCamel(base)
 	}
-	return lowerFirst(qualifiedInputName(expr))
+	return toLowerCamel(safeIdentifier(expr))
 }
 
 func splitMethodName(expr string, counts map[string]int) string {
 	base := baseInputName(expr)
-	if counts[base] == 1 || !strings.Contains(expr, ".") {
-		return "To" + base
+	if counts[base] == 1 {
+		return "To" + toCamel(base)
 	}
-	return "To" + qualifiedInputName(expr)
+	return "To" + safeIdentifier(expr)
 }
 
 func baseInputName(expr string) string {
@@ -357,25 +356,80 @@ func baseInputName(expr string) string {
 	if index := strings.LastIndex(trimmed, "."); index >= 0 {
 		trimmed = trimmed[index+1:]
 	}
+	trimmed = strings.TrimLeft(trimmed, "[]*")
+
+	if strings.HasPrefix(trimmed, "struct{") || trimmed == "" {
+		return safeIdentifier(expr)
+	}
 	return trimmed
 }
 
-func qualifiedInputName(expr string) string {
-	trimmed := expr
-	if index := strings.Index(trimmed, "["); index >= 0 {
-		trimmed = trimmed[:index]
+func safeIdentifier(expr string) string {
+	var builder strings.Builder
+	for _, r := range expr {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		} else {
+			builder.WriteRune('_')
+		}
 	}
-	parts := strings.Split(trimmed, ".")
-	if len(parts) == 1 {
-		return parts[0]
+	safe := builder.String()
+	for strings.Contains(safe, "__") {
+		safe = strings.ReplaceAll(safe, "__", "_")
 	}
-	return strings.Join(parts, "_")
+	safe = strings.Trim(safe, "_")
+	if safe == "" {
+		return "Anon"
+	}
+
+	parts := strings.Split(safe, "_")
+	var camelBuilder strings.Builder
+	for _, part := range parts {
+		camelBuilder.WriteString(toCamel(part))
+	}
+	return camelBuilder.String()
 }
 
-func lowerFirst(name string) string {
-	r, size := utf8.DecodeRuneInString(name)
-	if r == utf8.RuneError && size == 0 {
+func toCamel(name string) string {
+	if name == "" {
 		return ""
 	}
-	return string(unicode.ToLower(r)) + name[size:]
+	runes := []rune(name)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
+func toLowerCamel(name string) string {
+	if name == "" {
+		return ""
+	}
+	runes := []rune(name)
+
+	upperCount := 0
+	for _, r := range runes {
+		if unicode.IsUpper(r) {
+			upperCount++
+		} else {
+			break
+		}
+	}
+
+	if upperCount == 0 {
+		return name
+	}
+
+	if upperCount == len(runes) {
+		return strings.ToLower(name)
+	}
+
+	if upperCount == 1 {
+		runes[0] = unicode.ToLower(runes[0])
+		return string(runes)
+	}
+
+	for i := 0; i < upperCount-1; i++ {
+		runes[i] = unicode.ToLower(runes[i])
+	}
+
+	return string(runes)
 }
