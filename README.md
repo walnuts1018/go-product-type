@@ -35,7 +35,7 @@ go get -tool github.com/walnuts1018/go-adtgen
    ```
 
 3. **コードを生成する**
-   以下のコマンドを実行すると、同じディレクトリに `zz_generated.adtgen.go` が生成されます。
+   以下のコマンドを実行すると、各 `//go:build adtgen_generate` ファイルごとに、同じディレクトリへ `<source>_adtgen.go` が生成されます。たとえば `generate_types.go` からは `generate_types_adtgen.go` が生成されます。
 
    ```bash
    go generate ./...
