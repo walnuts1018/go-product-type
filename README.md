@@ -13,17 +13,17 @@ go get -tool github.com/walnuts1018/go-adtgen
 1. **生成用のファイルを作成する**
    ビルドタグ `//go:build adtgen_generate` を指定したファイル（例: `generate_types.go`）を作成し、生成したい型の定義を記述します。
 
-   直和型を生成するには、`//adtgen:sum`、直積型を生成するには、`//adtgen:product`に続いて構造体名を指定します。
+   直和型を生成するには、`// +adtgen:sum`、直積型を生成するには、`// +adtgen:product`に続いて構造体名を指定します。
 
    ```go
    //go:build adtgen_generate
 
    package mypkg
 
-   //adtgen:sum StructA StructB
+   // +adtgen:sum StructA StructB
    type MySumType struct{}
 
-   //adtgen:product Struct1 StructB
+   // +adtgen:product Struct1 StructB
    type MyProductType struct{}
    ```
 
@@ -43,7 +43,7 @@ go get -tool github.com/walnuts1018/go-adtgen
 
 ## 直和型 (Sum Types) の使い方
 
-`//adtgen:sum <Variant1> <Variant2> ...` を使用すると、指定した構造体を候補とするインターフェースが生成されます。
+`// +adtgen:sum <Variant1> <Variant2> ...` を使用すると、指定した構造体を候補とするインターフェースが生成されます。
 候補として利用できる構造体は、同一パッケージ内で定義されている必要があります。
 
 ### 定義例
@@ -52,7 +52,7 @@ go get -tool github.com/walnuts1018/go-adtgen
 type VariantA struct { Name string }
 type VariantB struct { Value int }
 
-//adtgen:sum VariantA VariantB
+// +adtgen:sum VariantA VariantB
 type MySumType struct{}
 ```
 
@@ -91,7 +91,7 @@ if a, ok := val.AsVariantA(); ok {
 
 ## 直積型 (Product Types) の使い方
 
-`//adtgen:product <Struct1> <Struct2> ...` を使用すると、指定した全ての構造体のフィールドを結合した新しい構造体が生成されます。
+`// +adtgen:product <Struct1> <Struct2> ...` を使用すると、指定した全ての構造体のフィールドを結合した新しい構造体が生成されます。
 
 ### 定義例
 
@@ -99,7 +99,7 @@ if a, ok := val.AsVariantA(); ok {
 type Base struct { ID string }
 type Detail struct { Name string }
 
-//adtgen:product Base Detail
+// +adtgen:product Base Detail
 type Combined struct{}
 ```
 

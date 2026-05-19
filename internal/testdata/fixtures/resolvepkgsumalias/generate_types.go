@@ -2,5 +2,5 @@
 
 package resolvepkgsumalias
 
-//adtgen:sum AliasHoge Fuga
+// +adtgen:sum AliasHoge Fuga
 type AliasOrFuga struct{}

@@ -11,7 +11,7 @@ import (
 func TestCollectDeclarationsRejectsAnnotatedNonEmptyStruct(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := goparser.ParseFile(fset, "sample.go", `package sample
-//adtgen:product A B
+// +adtgen:product A B
 type AB struct {
 	Field string
 }
@@ -35,7 +35,7 @@ type AB struct {
 func TestCollectDeclarationsCapturesPositionAndTypeParameters(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := goparser.ParseFile(fset, "sample.go", `package sample
-//adtgen:product A[T] B[U]
+// +adtgen:product A[T] B[U]
 type Pair[T comparable, U interface{ String() string }] struct{}
 `, goparser.ParseComments)
 	if err != nil {
@@ -68,7 +68,7 @@ type Pair[T comparable, U interface{ String() string }] struct{}
 func TestCollectDeclarationsExpandsGroupedTypeParameters(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := goparser.ParseFile(fset, "sample.go", `package sample
-//adtgen:product A[T] B[U]
+// +adtgen:product A[T] B[U]
 type Pair[T, U comparable] struct{}
 `, goparser.ParseComments)
 	if err != nil {

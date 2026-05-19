@@ -2,5 +2,5 @@
 
 package base
 
-//adtgen:product A[T] B
+// +adtgen:product A[T] B
 type AB[T any] struct{}

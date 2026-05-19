@@ -6,5 +6,5 @@ import "time"
 
 var _ time.Time
 
-//adtgen:sum Hoge time.Time
+// +adtgen:sum Hoge time.Time
 type HogeOrTime struct{}

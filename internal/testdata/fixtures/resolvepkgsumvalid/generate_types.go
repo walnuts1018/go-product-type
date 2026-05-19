@@ -2,5 +2,5 @@
 
 package resolvepkgsumvalid
 
-//adtgen:sum Hoge Fuga
+// +adtgen:sum Hoge Fuga
 type HogeOrFuga struct{}
