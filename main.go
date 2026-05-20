@@ -34,26 +34,29 @@ func run(args []string) error {
 		return err
 	}
 
-	declarations, err := parser.CollectDeclarations(pkg.Fset, pkg.SyntaxFiles())
+	files, err := parser.CollectFiles(pkg.Fset, pkg.SyntaxFiles())
 	if err != nil {
 		return err
+	}
+	declarations := make([]model.Declaration, 0)
+	for _, file := range files {
+		declarations = append(declarations, file.Declarations...)
 	}
 	if len(declarations) == 0 {
 		return fmt.Errorf("generator: no declarations found")
 	}
 
-	grouped, err := groupDeclarationsBySourceFilename(declarations)
-	if err != nil {
-		return err
-	}
-
-	filenames := sortedSourceFilenames(grouped)
+	filenames := sortedSourceFilenames(files)
 	if err := removeLegacyGeneratedFile(filenames[0]); err != nil {
 		return err
 	}
 
-	for _, filename := range filenames {
-		resolved, err := resolver.ResolveDeclarations(pkg, grouped[filename])
+	for _, file := range files {
+		if len(file.Declarations) == 0 {
+			continue
+		}
+
+		resolved, err := resolver.ResolveDeclarations(pkg, file.Declarations)
 		if err != nil {
 			return err
 		}
@@ -71,12 +74,18 @@ func run(args []string) error {
 			generated = append(generated, generatedType)
 		}
 
-		src, err := emitter.RenderForPackage(pkg.Package.PkgPath, pkg.Package.Name, generated)
+		src, err := emitter.RenderFile(model.GeneratedFile{
+			PackagePath:      pkg.Package.PkgPath,
+			PackageName:      pkg.Package.Name,
+			Imports:          file.PassthroughImports,
+			PassthroughDecls: file.PassthroughDecls,
+			Generated:        generated,
+		})
 		if err != nil {
 			return err
 		}
 
-		output, err := outputPathFromSourceFilename(filename)
+		output, err := outputPathFromSourceFilename(file.SourceFilename)
 		if err != nil {
 			return err
 		}
@@ -101,21 +110,13 @@ func outputPathFromSourceFilename(filename string) (string, error) {
 	return filepath.Join(dir, base+"_adtgen.go"), nil
 }
 
-func groupDeclarationsBySourceFilename(declarations []model.Declaration) (map[string][]model.Declaration, error) {
-	grouped := make(map[string][]model.Declaration)
-	for _, declaration := range declarations {
-		if declaration.SourceFilename == "" {
-			return nil, fmt.Errorf("generator: declaration %s has no source filename", declaration.Name)
+func sortedSourceFilenames(files []model.SourceFile) []string {
+	filenames := make([]string, 0, len(files))
+	for _, file := range files {
+		if file.SourceFilename == "" || len(file.Declarations) == 0 {
+			continue
 		}
-		grouped[declaration.SourceFilename] = append(grouped[declaration.SourceFilename], declaration)
-	}
-	return grouped, nil
-}
-
-func sortedSourceFilenames(grouped map[string][]model.Declaration) []string {
-	filenames := make([]string, 0, len(grouped))
-	for filename := range grouped {
-		filenames = append(filenames, filename)
+		filenames = append(filenames, file.SourceFilename)
 	}
 	sort.Strings(filenames)
 	return filenames

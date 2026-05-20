@@ -119,6 +119,42 @@ func TestGoGenerateSeparatesOutputsPerSourceFile(t *testing.T) {
 	}
 }
 
+func TestGoGeneratePreservesPassthroughCodeAndAllowsInlineTypesInAnnotations(t *testing.T) {
+	dir := prepareFixture(t, "passthrough")
+	outputPath := filepath.Join(dir, "generate_types_adtgen.go")
+
+	cmd := exec.Command("go", "generate", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("go generate failed: %v\n%s", err, out)
+	}
+
+	got, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("os.ReadFile(got) error = %v", err)
+	}
+	for _, want := range []string{
+		"import \"fmt\"",
+		"const InlinePrefix = \"inline\"",
+		"var DefaultInline = Inline{Label: InlinePrefix}",
+		"type Inline struct {",
+		"func FormatInline(x Inline) string",
+		"type Combined struct {",
+		"Label string",
+		"Count int",
+	} {
+		if !bytes.Contains(got, []byte(want)) {
+			t.Fatalf("generated output missing %q:\n%s", want, got)
+		}
+	}
+
+	cmd = exec.Command("go", "test", ".")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("passthrough fixture test failed: %v\n%s", err, out)
+	}
+}
+
 func prepareFixture(t *testing.T, name string) string {
 	t.Helper()
 

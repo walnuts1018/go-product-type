@@ -369,3 +369,45 @@ func TestRenderIncludesSumTypeParametersInInterfaceAndHelpers(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderFileIncludesPassthroughImportsAndDeclarationsBeforeGeneratedCode(t *testing.T) {
+	src, err := RenderFile(model.GeneratedFile{
+		PackagePath: "example.com/sample",
+		PackageName: "sample",
+		Imports: []model.PassthroughImport{
+			{Path: "fmt"},
+		},
+		PassthroughDecls: []string{
+			"const prefix = \"inline\"",
+			"type Inline struct{ Name string }",
+			"func UseInline(x Inline) string { return fmt.Sprint(x.Name) }",
+		},
+		Generated: []model.GeneratedType{
+			{
+				Name: "Combined",
+				Fields: []model.GeneratedField{
+					{Name: "Name", Type: types.Typ[types.String]},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RenderFile() error = %v", err)
+	}
+
+	for _, want := range []string{
+		"import \"fmt\"",
+		"const prefix = \"inline\"",
+		"type Inline struct{ Name string }",
+		"func UseInline(x Inline) string",
+		"type Combined struct {",
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("RenderFile() output missing %q:\n%s", want, src)
+		}
+	}
+
+	if strings.Index(src, "const prefix") > strings.Index(src, "type Combined struct") {
+		t.Fatalf("passthrough declarations were not emitted before generated code:\n%s", src)
+	}
+}

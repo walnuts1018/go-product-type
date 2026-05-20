@@ -273,3 +273,88 @@ func TestCollectDeclarationsRejectsNoSetterForProduct(t *testing.T) {
 		t.Fatalf("unexpected error: %q", err)
 	}
 }
+
+func TestCollectFilesCapturesPassthroughCodeAndAnnotatedDeclarations(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", `package sample
+
+import "fmt"
+
+const label = "x"
+
+type Inline struct{ Name string }
+
+func UseInline(x Inline) string { return fmt.Sprint(x.Name) }
+
+// +adtgen:product=Inline,External
+type Combined struct{}
+`, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := CollectFiles(fset, []*ast.File{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1", len(files))
+	}
+	if len(files[0].Declarations) != 1 {
+		t.Fatalf("got %d declarations, want 1", len(files[0].Declarations))
+	}
+	if files[0].Declarations[0].Name != "Combined" {
+		t.Fatalf("got declaration %q, want %q", files[0].Declarations[0].Name, "Combined")
+	}
+	if len(files[0].PassthroughImports) != 1 {
+		t.Fatalf("got %d passthrough imports, want 1", len(files[0].PassthroughImports))
+	}
+	if files[0].PassthroughImports[0].Path != "fmt" {
+		t.Fatalf("got import path %q, want %q", files[0].PassthroughImports[0].Path, "fmt")
+	}
+	got := strings.Join(files[0].PassthroughDecls, "\n")
+	for _, want := range []string{
+		"const label = \"x\"",
+		"type Inline struct{",
+		"func UseInline(x Inline) string",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("passthrough declarations missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "type Combined struct{}") {
+		t.Fatalf("passthrough declarations unexpectedly contain annotated declaration:\n%s", got)
+	}
+}
+
+func TestCollectFilesKeepsUnannotatedSpecsInGroupedTypeDeclaration(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "sample.go", `package sample
+
+type (
+	Kept struct{ Name string }
+	// +adtgen:product=A,B
+	Generated struct{}
+)
+`, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := CollectFiles(fset, []*ast.File{file})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1", len(files))
+	}
+	if len(files[0].PassthroughDecls) != 1 {
+		t.Fatalf("got %d passthrough decls, want 1", len(files[0].PassthroughDecls))
+	}
+	if !strings.Contains(files[0].PassthroughDecls[0], "Kept struct") {
+		t.Fatalf("passthrough decl missing kept type:\n%s", files[0].PassthroughDecls[0])
+	}
+	if strings.Contains(files[0].PassthroughDecls[0], "Generated struct") {
+		t.Fatalf("passthrough decl unexpectedly contains annotated type:\n%s", files[0].PassthroughDecls[0])
+	}
+}

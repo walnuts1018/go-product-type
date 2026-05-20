@@ -28,3 +28,15 @@ type DeclaredInterfaceMethod struct {
 	Name      string
 	Signature string
 }
+
+type PassthroughImport struct {
+	Name string
+	Path string
+}
+
+type SourceFile struct {
+	SourceFilename     string
+	Declarations       []Declaration
+	PassthroughImports []PassthroughImport
+	PassthroughDecls   []string
+}

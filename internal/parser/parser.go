@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+	"strconv"
 	"strings"
 
 	"github.com/walnuts1018/go-adtgen/internal/model"
@@ -17,54 +18,130 @@ const (
 )
 
 func CollectDeclarations(fset *token.FileSet, files []*ast.File) ([]model.Declaration, error) {
-	var declarations []model.Declaration
-
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				kind, expression, options, ok, err := declarationSpecForTypeSpec(genDecl, typeSpec)
-				if err != nil {
-					pos := fset.Position(typeSpec.Pos())
-					return nil, fmt.Errorf("%s: %w", pos, err)
-				}
-				if !ok {
-					continue
-				}
-				if typeSpec.Assign.IsValid() {
-					pos := fset.Position(typeSpec.Pos())
-					return nil, fmt.Errorf("%s: annotated declaration %s must not be a type alias", pos, typeSpec.Name.Name)
-				}
-				interfaceMethods, err := validateDeclarationShape(fset, typeSpec, kind)
-				if err != nil {
-					pos := fset.Position(typeSpec.Pos())
-					return nil, fmt.Errorf("%s: %w", pos, err)
-				}
-
-				position := fset.Position(typeSpec.Pos())
-				declarations = append(declarations, model.Declaration{
-					Kind:             kind,
-					Name:             typeSpec.Name.Name,
-					Expression:       expression,
-					Options:          options,
-					TypeParameters:   collectTypeParameters(fset, typeSpec.TypeParams),
-					InterfaceMethods: interfaceMethods,
-					Position:         position,
-					SourceFilename:   position.Filename,
-				})
-			}
-		}
+	collected, err := CollectFiles(fset, files)
+	if err != nil {
+		return nil, err
 	}
 
+	var declarations []model.Declaration
+	for _, file := range collected {
+		declarations = append(declarations, file.Declarations...)
+	}
 	return declarations, nil
+}
+
+func CollectFiles(fset *token.FileSet, files []*ast.File) ([]model.SourceFile, error) {
+	collected := make([]model.SourceFile, 0, len(files))
+	for _, file := range files {
+		sourceFile := model.SourceFile{
+			SourceFilename: fset.Position(file.Pos()).Filename,
+		}
+
+		for _, decl := range file.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok {
+				sourceFile.PassthroughDecls = append(sourceFile.PassthroughDecls, renderNode(fset, decl))
+				continue
+			}
+			switch genDecl.Tok {
+			case token.IMPORT:
+				imports, err := collectPassthroughImports(genDecl)
+				if err != nil {
+					pos := fset.Position(genDecl.Pos())
+					return nil, fmt.Errorf("%s: %w", pos, err)
+				}
+				sourceFile.PassthroughImports = append(sourceFile.PassthroughImports, imports...)
+			case token.TYPE:
+				passthroughDecl, declarations, err := collectTypeDecl(fset, genDecl)
+				if err != nil {
+					return nil, err
+				}
+				sourceFile.Declarations = append(sourceFile.Declarations, declarations...)
+				if passthroughDecl != "" {
+					sourceFile.PassthroughDecls = append(sourceFile.PassthroughDecls, passthroughDecl)
+				}
+			default:
+				sourceFile.PassthroughDecls = append(sourceFile.PassthroughDecls, renderNode(fset, decl))
+			}
+		}
+
+		if len(sourceFile.Declarations) == 0 && len(sourceFile.PassthroughImports) == 0 && len(sourceFile.PassthroughDecls) == 0 {
+			continue
+		}
+		collected = append(collected, sourceFile)
+	}
+
+	return collected, nil
+}
+
+func collectTypeDecl(fset *token.FileSet, genDecl *ast.GenDecl) (string, []model.Declaration, error) {
+	var declarations []model.Declaration
+	passthroughSpecs := make([]ast.Spec, 0, len(genDecl.Specs))
+
+	for _, spec := range genDecl.Specs {
+		typeSpec, ok := spec.(*ast.TypeSpec)
+		if !ok {
+			continue
+		}
+		kind, expression, options, annotated, err := declarationSpecForTypeSpec(genDecl, typeSpec)
+		if err != nil {
+			pos := fset.Position(typeSpec.Pos())
+			return "", nil, fmt.Errorf("%s: %w", pos, err)
+		}
+		if !annotated {
+			passthroughSpecs = append(passthroughSpecs, spec)
+			continue
+		}
+		if typeSpec.Assign.IsValid() {
+			pos := fset.Position(typeSpec.Pos())
+			return "", nil, fmt.Errorf("%s: annotated declaration %s must not be a type alias", pos, typeSpec.Name.Name)
+		}
+		interfaceMethods, err := validateDeclarationShape(fset, typeSpec, kind)
+		if err != nil {
+			pos := fset.Position(typeSpec.Pos())
+			return "", nil, fmt.Errorf("%s: %w", pos, err)
+		}
+
+		position := fset.Position(typeSpec.Pos())
+		declarations = append(declarations, model.Declaration{
+			Kind:             kind,
+			Name:             typeSpec.Name.Name,
+			Expression:       expression,
+			Options:          options,
+			TypeParameters:   collectTypeParameters(fset, typeSpec.TypeParams),
+			InterfaceMethods: interfaceMethods,
+			Position:         position,
+			SourceFilename:   position.Filename,
+		})
+	}
+
+	if len(passthroughSpecs) == 0 {
+		return "", declarations, nil
+	}
+
+	filtered := *genDecl
+	filtered.Specs = passthroughSpecs
+	return renderNode(fset, &filtered), declarations, nil
+}
+
+func collectPassthroughImports(genDecl *ast.GenDecl) ([]model.PassthroughImport, error) {
+	imports := make([]model.PassthroughImport, 0, len(genDecl.Specs))
+	for _, spec := range genDecl.Specs {
+		importSpec, ok := spec.(*ast.ImportSpec)
+		if !ok {
+			continue
+		}
+		path, err := strconv.Unquote(importSpec.Path.Value)
+		if err != nil {
+			return nil, err
+		}
+		imp := model.PassthroughImport{Path: path}
+		if importSpec.Name != nil {
+			imp.Name = importSpec.Name.Name
+		}
+		imports = append(imports, imp)
+	}
+	return imports, nil
 }
 
 func declarationSpecForTypeSpec(genDecl *ast.GenDecl, typeSpec *ast.TypeSpec) (model.DeclarationKind, string, model.DeclarationOptions, bool, error) {

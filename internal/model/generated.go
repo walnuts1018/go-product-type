@@ -51,3 +51,11 @@ type GeneratedCommonField struct {
 	SetterName string
 	Paths      [][]string
 }
+
+type GeneratedFile struct {
+	PackagePath      string
+	PackageName      string
+	Imports          []PassthroughImport
+	PassthroughDecls []string
+	Generated        []GeneratedType
+}

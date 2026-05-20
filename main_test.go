@@ -28,25 +28,22 @@ func TestOutputPathFromSourceFilenameRejectsNonGoFiles(t *testing.T) {
 	}
 }
 
-func TestGroupDeclarationsBySourceFilename(t *testing.T) {
-	decls := []model.Declaration{
-		{Name: "A", SourceFilename: "/tmp/pkg/first.go"},
-		{Name: "B", SourceFilename: "/tmp/pkg/second.go"},
-		{Name: "C", SourceFilename: "/tmp/pkg/first.go"},
+func TestSortedSourceFilenames(t *testing.T) {
+	files := []model.SourceFile{
+		{SourceFilename: "/tmp/pkg/second.go", Declarations: []model.Declaration{{Name: "B"}}},
+		{SourceFilename: "/tmp/pkg/ignored.go"},
+		{SourceFilename: "/tmp/pkg/first.go", Declarations: []model.Declaration{{Name: "A"}}},
 	}
 
-	grouped, err := groupDeclarationsBySourceFilename(decls)
-	if err != nil {
-		t.Fatalf("groupDeclarationsBySourceFilename() error = %v", err)
+	got := sortedSourceFilenames(files)
+	if len(got) != 2 {
+		t.Fatalf("got %d filenames, want 2", len(got))
 	}
-	if len(grouped) != 2 {
-		t.Fatalf("got %d groups, want 2", len(grouped))
+	if got[0] != "/tmp/pkg/first.go" {
+		t.Fatalf("got first filename %q, want %q", got[0], "/tmp/pkg/first.go")
 	}
-	if len(grouped["/tmp/pkg/first.go"]) != 2 {
-		t.Fatalf("got %d declarations for first.go, want 2", len(grouped["/tmp/pkg/first.go"]))
-	}
-	if len(grouped["/tmp/pkg/second.go"]) != 1 {
-		t.Fatalf("got %d declarations for second.go, want 1", len(grouped["/tmp/pkg/second.go"]))
+	if got[1] != "/tmp/pkg/second.go" {
+		t.Fatalf("got second filename %q, want %q", got[1], "/tmp/pkg/second.go")
 	}
 }
 
